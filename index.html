@@ -1,0 +1,296 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BUK PANS Digital Secretariat</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--green:#075b3b;--light:#edf4ef;--ink:#203329}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;background:#f3f6f4;color:var(--ink)}
+header{background:var(--green);color:#fff;padding:20px}
+header h1{font-size:22px;margin:0 0 5px}
+header p{margin:0;font-size:13px}
+main{max-width:1100px;margin:auto;padding:18px}
+.login{max-width:420px;margin:45px auto;background:#fff;padding:24px;border-radius:12px;box-shadow:0 3px 15px #0001}
+input,button{font:inherit;padding:12px;border-radius:7px}
+input{width:100%;border:1px solid #ccd5ce;margin:7px 0}
+button{border:0;background:#087448;color:white;font-weight:bold;cursor:pointer}
+button:disabled{opacity:.6}
+.hidden{display:none!important}
+.muted{color:#68776e;font-size:13px}
+.message{font-size:14px;margin-top:10px;overflow-wrap:anywhere}
+.topline{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.logout{background:#a83232;width:auto}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:12px;margin:18px 0}
+.card,.panel{background:#fff;padding:17px;border-radius:10px;box-shadow:0 2px 9px #0001}
+.card strong{display:block;font-size:25px;color:#087448}
+.card span{font-size:13px}
+.nav{display:flex;gap:8px;overflow-x:auto;padding:12px 0}
+.nav button{white-space:nowrap;background:#dce9e1;color:#075b3b}
+.nav button.active{background:#075b3b;color:white}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{text-align:left;padding:11px;border-bottom:1px solid #e5eae6;overflow-wrap:anywhere}
+th{background:var(--light)}
+footer{text-align:center;padding:24px;color:#78837b;font-size:12px}
+</style>
+</head>
+<body>
+
+<header>
+<h1>BUK PANS</h1>
+<p>Digital Secretariat Management System</p>
+</header>
+
+<main>
+<section id="loginPage" class="login">
+<h2>Officer Login</h2>
+<p class="muted">Authorised Secretariat officers only.</p>
+<form id="loginForm">
+<input id="email" type="email" placeholder="Email address" autocomplete="username" required>
+<input id="password" type="password" placeholder="Password" autocomplete="current-password" required>
+<button id="loginButton" type="submit" style="width:100%">Sign In</button>
+</form>
+<div id="loginMessage" class="message" role="status"></div>
+</section>
+
+<section id="dashboardPage" class="hidden">
+<div class="topline">
+<div>
+<h2>Secretariat Dashboard</h2>
+<div id="officerInfo" class="muted"></div>
+</div>
+<button id="logoutButton" class="logout">Sign Out</button>
+</div>
+
+<div class="cards">
+<div class="card"><strong id="meetingCount">—</strong><span>Meetings</span></div>
+<div class="card"><strong id="documentCount">—</strong><span>Documents</span></div>
+<div class="card"><strong id="letterCount">—</strong><span>Correspondence</span></div>
+<div class="card"><strong id="resolutionCount">—</strong><span>Resolutions</span></div>
+</div>
+
+<nav class="nav" id="navigation">
+<button class="active" data-table="home">Dashboard</button>
+<button data-table="meetings">Meetings</button>
+<button data-table="meeting_attendance">Attendance</button>
+<button data-table="meeting_minutes">Minutes</button>
+<button data-table="documents">Documents</button>
+<button data-table="correspondence">Correspondence</button>
+<button data-table="announcements">Announcements</button>
+<button data-table="resolutions">Resolutions</button>
+<button data-table="activity_logs">Activity Logs</button>
+</nav>
+
+<div class="panel">
+<h3 id="sectionTitle">Welcome to the Secretariat</h3>
+<p id="sectionDescription" class="muted">Your central workspace for official PANS Secretariat records.</p>
+<div id="recordsArea">Select a section above to view its records.</div>
+<div id="sectionMessage" class="message"></div>
+</div>
+</section>
+</main>
+
+<footer>BUK PANS Digital Secretariat | Official Administrative Workspace</footer>
+
+<script>
+const SUPABASE_URL = "https://nclcshavawjcdkmjeixc.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_pdFnwau9y_PTSmvIBuRk9A_DLQ7weZ3";
+
+const db = window.supabase.createClient(
+SUPABASE_URL,
+SUPABASE_PUBLISHABLE_KEY
+);
+
+const $ = id => document.getElementById(id);
+
+const sectionNames = {
+meetings:"Meetings",
+meeting_attendance:"Meeting Attendance",
+meeting_minutes:"Meeting Minutes",
+documents:"Document Archive",
+correspondence:"Official Correspondence",
+announcements:"Announcements",
+resolutions:"Resolutions",
+activity_logs:"Activity Logs"
+};
+
+function showMessage(el,text,isError=false){
+el.textContent=text;
+el.style.color=isError?"#b42318":"#087448";
+}
+
+async function loadCounts(){
+const items=[
+["meetings","meetingCount"],
+["documents","documentCount"],
+["correspondence","letterCount"],
+["resolutions","resolutionCount"]
+];
+
+for(const [table,id] of items){
+const {count,error}=await db.from(table)
+.select("*",{count:"exact",head:true});
+$(id).textContent=error?"—":count;
+}
+}
+
+async function showDashboard(session){
+const {data:profile,error}=await db.from("profiles")
+.select("full_name,role,is_active")
+.eq("id",session.user.id)
+.maybeSingle();
+
+if(error||!profile||profile.is_active!==true){
+await db.auth.signOut();
+$("dashboardPage").classList.add("hidden");
+$("loginPage").classList.remove("hidden");
+showMessage($("loginMessage"),
+"Your officer profile could not be verified. Contact the system administrator.",
+true);
+return;
+}
+
+$("loginPage").classList.add("hidden");
+$("dashboardPage").classList.remove("hidden");
+
+$("officerInfo").textContent=
+(profile.full_name||session.user.email)+
+" | Role: "+profile.role;
+
+await loadCounts();
+}
+
+async function loadRecords(table){
+const area=$("recordsArea");
+const msg=$("sectionMessage");
+
+area.textContent="Loading records...";
+msg.textContent="";
+
+const {data,error}=await db.from(table).select("*").limit(50);
+
+if(error){
+area.textContent="Could not load records.";
+showMessage(msg,error.message,true);
+return;
+}
+
+if(!data||data.length===0){
+area.textContent="No records available in this section yet.";
+return;
+}
+
+const columns=Object.keys(data[0]);
+const wrap=document.createElement("div");
+wrap.className="tablewrap";
+
+const tbl=document.createElement("table");
+const thead=document.createElement("thead");
+const hr=document.createElement("tr");
+
+columns.forEach(c=>{
+const th=document.createElement("th");
+th.textContent=c.replaceAll("_"," ");
+hr.appendChild(th);
+});
+
+thead.appendChild(hr);
+tbl.appendChild(thead);
+
+const tbody=document.createElement("tbody");
+
+data.forEach(record=>{
+const tr=document.createElement("tr");
+
+columns.forEach(c=>{
+const td=document.createElement("td");
+const v=record[c];
+td.textContent=v==null?"":
+typeof v==="object"?JSON.stringify(v):String(v);
+tr.appendChild(td);
+});
+
+tbody.appendChild(tr);
+});
+
+tbl.appendChild(tbody);
+wrap.appendChild(tbl);
+area.replaceChildren(wrap);
+}
+
+$("loginForm").addEventListener("submit",async e=>{
+e.preventDefault();
+
+const btn=$("loginButton");
+btn.disabled=true;
+btn.textContent="Signing in...";
+showMessage($("loginMessage"),"");
+
+const {data,error}=await db.auth.signInWithPassword({
+email:$("email").value.trim(),
+password:$("password").value
+});
+
+btn.disabled=false;
+btn.textContent="Sign In";
+
+if(error){
+showMessage($("loginMessage"),error.message,true);
+return;
+}
+
+await showDashboard(data.session);
+});
+
+$("logoutButton").addEventListener("click",async()=>{
+await db.auth.signOut();
+$("dashboardPage").classList.add("hidden");
+$("loginPage").classList.remove("hidden");
+$("password").value="";
+});
+
+$("navigation").addEventListener("click",async e=>{
+const btn=e.target.closest("button[data-table]");
+if(!btn)return;
+
+document.querySelectorAll("#navigation button")
+.forEach(b=>b.classList.remove("active"));
+
+btn.classList.add("active");
+
+const table=btn.dataset.table;
+
+if(table==="home"){
+$("sectionTitle").textContent="Welcome to the Secretariat";
+$("sectionDescription").textContent=
+"Your central workspace for official PANS Secretariat records.";
+$("recordsArea").textContent=
+"Select a section above to view its records.";
+$("sectionMessage").textContent="";
+return;
+}
+
+$("sectionTitle").textContent=sectionNames[table];
+$("sectionDescription").textContent=
+"Latest records in this section.";
+
+await loadRecords(table);
+});
+
+db.auth.getSession().then(({data})=>{
+if(data.session)showDashboard(data.session);
+});
+
+db.auth.onAuthStateChange((event,session)=>{
+if(event==="SIGNED_OUT"){
+$("dashboardPage").classList.add("hidden");
+$("loginPage").classList.remove("hidden");
+}
+});
+</script>
+</body>
+</html>
