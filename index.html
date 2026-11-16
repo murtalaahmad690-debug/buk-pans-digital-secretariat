@@ -253,7 +253,28 @@ $("loginPage").classList.remove("hidden");
 $("password").value="";
 });
 
-$("navigation").addEventListener("click",async e=>{
+$("navigation").
+$("forgotPassword").addEventListener("click", async e => {
+  e.preventDefault();
+
+  const email = $("email").value.trim();
+
+  if (!email) {
+    showMessage($("loginMessage"), "Enter your email address first.", true);
+    return;
+  }
+
+  const { error } = await db.auth.resetPasswordForEmail(email, {
+    redirectTo: "https://pansbuk.netlify.app/"
+  });
+
+  if (error) {
+    showMessage($("loginMessage"), error.message, true);
+  } else {
+    showMessage($("loginMessage"), "Password reset link sent. Check your Gmail.");
+  }
+});
+addEventListener("click",async e=>{
 const btn=e.target.closest("button[data-table]");
 if(!btn)return;
 
