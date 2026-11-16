@@ -6,6 +6,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>BUK PANS Digital Secretariat</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 <style>
 :root{--green:#075b3b;--light:#edf4ef;--ink:#203329}
 *{box-sizing:border-box}
@@ -25,9 +26,12 @@ button:disabled{opacity:.6}
 .topline{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
 .logout{background:#a83232;width:auto}
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:12px;margin:18px 0}
-.card,.panel{background:#fff;padding:17px;border-radius:10px;box-shadow:0 2px 9px #0001}
+.card{background:#fff;padding:17px;border-radius:10px;box-shadow:0 2px 9px #0001}
+.dashboard-card{width:100%;color:var(--ink);text-align:left;background:#fff}
+.dashboard-card:hover{background:var(--light)}
 .card strong{display:block;font-size:25px;color:#087448}
 .card span{font-size:13px}
+.panel{background:#fff;padding:17px;border-radius:10px;box-shadow:0 2px 9px #0001}
 .nav{display:flex;gap:8px;overflow-x:auto;padding:12px 0}
 .nav button{white-space:nowrap;background:#dce9e1;color:#075b3b}
 .nav button.active{background:#075b3b;color:white}
@@ -38,6 +42,7 @@ th{background:var(--light)}
 footer{text-align:center;padding:24px;color:#78837b;font-size:12px}
 </style>
 </head>
+
 <body>
 
 <header>
@@ -46,20 +51,35 @@ footer{text-align:center;padding:24px;color:#78837b;font-size:12px}
 </header>
 
 <main>
+
 <section id="loginPage" class="login">
 <h2>Officer Login</h2>
 <p class="muted">Authorised Secretariat officers only.</p>
+
 <form id="loginForm">
 <input id="email" type="email" placeholder="Email address" autocomplete="username" required>
 <input id="password" type="password" placeholder="Password" autocomplete="current-password" required>
-<button id="loginButton" type="submit" style="width:100%">Sign In</button><p style="text-align:center; margin-top:12px">
-  <a href="#" id="forgotPassword">Forgot Password?</a>
+<button id="loginButton" type="submit" style="width:100%">Sign In</button>
+<p style="text-align:center;margin-top:12px">
+<a href="#" id="forgotPassword">Forgot Password?</a>
 </p>
 </form>
 <div id="loginMessage" class="message" role="status"></div>
 </section>
 
+<section id="resetPage" class="login hidden">
+<h2>Set New Password</h2>
+<p class="muted">Enter and confirm your new password.</p>
+<form id="resetForm">
+<input id="newPassword" type="password" placeholder="New password" minlength="8" required>
+<input id="confirmPassword" type="password" placeholder="Confirm new password" minlength="8" required>
+<button id="resetButton" type="submit" style="width:100%">Update Password</button>
+</form>
+<div id="resetMessage" class="message"></div>
+</section>
+
 <section id="dashboardPage" class="hidden">
+
 <div class="topline">
 <div>
 <h2>Secretariat Dashboard</h2>
@@ -69,22 +89,39 @@ footer{text-align:center;padding:24px;color:#78837b;font-size:12px}
 </div>
 
 <div class="cards">
-<div class="card"><strong id="meetingCount">—</strong><span>Meetings</span></div>
-<div class="card"><strong id="documentCount">—</strong><span>Documents</span></div>
-<div class="card"><strong id="letterCount">—</strong><span>Correspondence</span></div>
-<div class="card"><strong id="resolutionCount">—</strong><span>Resolutions</span></div>
+
+<button type="button" class="card dashboard-card" data-table="meetings">
+<strong id="meetingCount">—</strong>
+<span>Meetings</span>
+</button>
+
+<button type="button" class="card dashboard-card" data-table="documents">
+<strong id="documentCount">—</strong>
+<span>Documents</span>
+</button>
+
+<button type="button" class="card dashboard-card" data-table="correspondence">
+<strong id="letterCount">—</strong>
+<span>Correspondence</span>
+</button>
+
+<button type="button" class="card dashboard-card" data-table="resolutions">
+<strong id="resolutionCount">—</strong>
+<span>Resolutions</span>
+</button>
+
 </div>
 
 <nav class="nav" id="navigation">
-<button class="active" data-table="home">Dashboard</button>
-<button data-table="meetings">Meetings</button>
-<button data-table="meeting_attendance">Attendance</button>
-<button data-table="meeting_minutes">Minutes</button>
-<button data-table="documents">Documents</button>
-<button data-table="correspondence">Correspondence</button>
-<button data-table="announcements">Announcements</button>
-<button data-table="resolutions">Resolutions</button>
-<button data-table="activity_logs">Activity Logs</button>
+<button type="button" class="active" data-table="home">Dashboard</button>
+<button type="button" data-table="meetings">Meetings</button>
+<button type="button" data-table="meeting_attendance">Attendance</button>
+<button type="button" data-table="meeting_minutes">Minutes</button>
+<button type="button" data-table="documents">Documents</button>
+<button type="button" data-table="correspondence">Correspondence</button>
+<button type="button" data-table="announcements">Announcements</button>
+<button type="button" data-table="resolutions">Resolutions</button>
+<button type="button" data-table="activity_logs">Activity Logs</button>
 </nav>
 
 <div class="panel">
@@ -93,6 +130,7 @@ footer{text-align:center;padding:24px;color:#78837b;font-size:12px}
 <div id="recordsArea">Select a section above to view its records.</div>
 <div id="sectionMessage" class="message"></div>
 </div>
+
 </section>
 </main>
 
@@ -151,12 +189,12 @@ await db.auth.signOut();
 $("dashboardPage").classList.add("hidden");
 $("loginPage").classList.remove("hidden");
 showMessage($("loginMessage"),
-"Your officer profile could not be verified. Contact the system administrator.",
-true);
+"Your officer profile could not be verified. Contact the system administrator.",true);
 return;
 }
 
 $("loginPage").classList.add("hidden");
+$("resetPage").classList.add("hidden");
 $("dashboardPage").classList.remove("hidden");
 
 $("officerInfo").textContent=
@@ -255,34 +293,80 @@ $("loginPage").classList.remove("hidden");
 $("password").value="";
 });
 
-$("forgotPassword").addEventListener("click", async e => {
-  e.preventDefault();
+$("forgotPassword").addEventListener("click",async e=>{
+e.preventDefault();
 
-  const email = $("email").value.trim();
+const email=$("email").value.trim();
 
-  if (!email) {
-    showMessage($("loginMessage"), "Enter your email address first.", true);
-    return;
-  }
+if(!email){
+showMessage($("loginMessage"),"Enter your email address first.",true);
+return;
+}
 
-  const { error } = await db.auth.resetPasswordForEmail(email, {
-    redirectTo: "https://pansbuk.netlify.app/"
-  });
-
-  if (error) {
-    showMessage($("loginMessage"), error.message, true);
-  } else {
-    showMessage($("loginMessage"), "Password reset link sent. Check your Gmail.");
-  }
+const {error}=await db.auth.resetPasswordForEmail(email,{
+redirectTo:"https://pansbuk.netlify.app/"
 });
-addEventListener("click",async e=>{
+
+if(error){
+showMessage($("loginMessage"),error.message,true);
+}else{
+showMessage($("loginMessage"),"Password reset link sent. Check your Gmail.");
+}
+});
+
+$("resetForm").addEventListener("submit",async e=>{
+e.preventDefault();
+
+const password=$("newPassword").value;
+const confirm=$("confirmPassword").value;
+
+if(password.length<8){
+showMessage($("resetMessage"),"Password must contain at least 8 characters.",true);
+return;
+}
+
+if(password!==confirm){
+showMessage($("resetMessage"),"The passwords do not match.",true);
+return;
+}
+
+const btn=$("resetButton");
+btn.disabled=true;
+btn.textContent="Updating...";
+
+const {error}=await db.auth.updateUser({password});
+
+btn.disabled=false;
+btn.textContent="Update Password";
+
+if(error){
+showMessage($("resetMessage"),error.message,true);
+return;
+}
+
+showMessage($("resetMessage"),"Password updated successfully. Please sign in with your new password.");
+
+await db.auth.signOut();
+
+$("resetPage").classList.add("hidden");
+$("loginPage").classList.remove("hidden");
+$("password").value="";
+$("newPassword").value="";
+$("confirmPassword").value="";
+});
+
+document.addEventListener("click",async e=>{
 const btn=e.target.closest("button[data-table]");
 if(!btn)return;
 
 document.querySelectorAll("#navigation button")
 .forEach(b=>b.classList.remove("active"));
 
-btn.classList.add("active");
+const navButton=document.querySelector(
+'#navigation button[data-table="'+btn.dataset.table+'"]'
+);
+
+if(navButton)navButton.classList.add("active");
 
 const table=btn.dataset.table;
 
@@ -296,23 +380,36 @@ $("sectionMessage").textContent="";
 return;
 }
 
+if(!sectionNames[table]){
+showMessage($("sectionMessage"),"Unknown section.",true);
+return;
+}
+
 $("sectionTitle").textContent=sectionNames[table];
-$("sectionDescription").textContent=
-"Latest records in this section.";
+$("sectionDescription").textContent="Latest records in this section.";
 
 await loadRecords(table);
 });
 
-db.auth.getSession().then(({data})=>{
+db.auth.getSession().then(({data,error})=>{
+if(error)return;
 if(data.session)showDashboard(data.session);
 });
 
 db.auth.onAuthStateChange((event,session)=>{
+if(event==="PASSWORD_RECOVERY"){
+$("loginPage").classList.add("hidden");
+$("dashboardPage").classList.add("hidden");
+$("resetPage").classList.remove("hidden");
+}
+
 if(event==="SIGNED_OUT"){
 $("dashboardPage").classList.add("hidden");
+$("resetPage").classList.add("hidden");
 $("loginPage").classList.remove("hidden");
 }
 });
 </script>
+
 </body>
 </html>
