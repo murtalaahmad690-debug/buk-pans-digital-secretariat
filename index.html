@@ -203,6 +203,7 @@ return;
 
 currentProfile=profile;
 $("approvalNav").classList.toggle("hidden",profile.role!=="admin");
+$("officerNav").classList.toggle("hidden",profile.role!=="admin");
 $("loginPage").classList.add("hidden");
 $("resetPage").classList.add("hidden");
 $("dashboardPage").classList.remove("hidden");
