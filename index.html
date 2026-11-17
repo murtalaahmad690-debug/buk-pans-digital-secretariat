@@ -125,6 +125,7 @@ footer{text-align:center;padding:24px;color:#78837b;font-size:12px}
 <button type="button" data-workflow="new">New Submission</button>
 <button type="button" data-workflow="mine">My Submissions</button>
 <button type="button" data-workflow="approvals" id="approvalNav" class="hidden">Approval Centre</button>
+<button type="button" data-officers="open" id="officerNav" class="hidden">Officer Management</button>
 </nav>
 
 <div class="panel">
@@ -435,6 +436,80 @@ const {data,error}=await db.from("record_submissions").select("id,module,title,p
 if(error){$("recordsArea").textContent="Could not load pending submissions.";showMessage($("sectionMessage"),error.message,true);return;}
 renderSubmissionTable(data||false,true);
 }
+async function showOfficerManagement(){
+if(!currentProfile||currentProfile.role!=="admin"){
+showMessage($("sectionMessage"),"Administrator access required.",true);return;
+}
+workflowHeader("Officer Management","Invite Secretariat officers and manage their access.");
+const area=$("recordsArea");
+const form=document.createElement("form");
+form.style.maxWidth="620px";
+const heading=document.createElement("h4");heading.textContent="Invite a new officer";form.appendChild(heading);
+function field(label,type){
+const wrap=document.createElement("label");wrap.style.display="block";wrap.style.margin="10px 0";wrap.textContent=label;
+const input=document.createElement("input");input.type=type;input.required=true;input.style.width="100%";wrap.appendChild(input);form.appendChild(wrap);return input;
+}
+const fullName=field("Full name","text");
+const email=field("Email address","email");
+const roleWrap=document.createElement("label");roleWrap.style.display="block";roleWrap.style.margin="10px 0";roleWrap.textContent="Officer role";
+const role=document.createElement("select");role.style.width="100%";role.style.padding="12px";
+for(const item of ["secretary_general","assistant_secretary","records_officer"]){const option=document.createElement("option");option.value=item;option.textContent=item.replaceAll("_"," ");role.appendChild(option);}
+roleWrap.appendChild(role);form.appendChild(roleWrap);
+const invite=document.createElement("button");invite.type="submit";invite.textContent="Send Invitation";form.appendChild(invite);
+form.addEventListener("submit",async e=>{
+e.preventDefault();invite.disabled=true;invite.textContent="Sending...";
+const {data,error}=await db.functions.invoke("manage-officers",{body:{action:"invite",full_name:fullName.value.trim(),email:email.value.trim(),role:role.value}});
+invite.disabled=false;invite.textContent="Send Invitation";
+if(error){showMessage($("sectionMessage"),error.message,true);return;}
+if(data&&data.error){showMessage($("sectionMessage"),data.error,true);return;}
+showMessage($("sectionMessage"),"Invitation sent. The officer should check their email.");
+form.reset();await loadOfficerList();
+});
+area.appendChild(form);
+const divider=document.createElement("hr");divider.style.margin="22px 0";area.appendChild(divider);
+const subheading=document.createElement("h4");subheading.textContent="Registered officers";area.appendChild(subheading);
+const list=document.createElement("div");list.id="officerList";list.textContent="Loading officers...";area.appendChild(list);
+await loadOfficerList();
+}
+async function loadOfficerList(){
+const list=$("officerList");if(!list)return;
+list.textContent="Loading officers...";
+const {data,error}=await db.from("profiles").select("id,full_name,email,role,is_active,created_at").order("created_at",{ascending:true});
+if(error){list.textContent="Could not load officers: "+error.message;return;}
+if(!data||!data.length){list.textContent="No officer profiles found.";return;}
+const wrap=document.createElement("div");wrap.className="tablewrap";
+const table=document.createElement("table");const head=document.createElement("thead");const hr=document.createElement("tr");
+for(const label of ["Name","Email","Role","Status","Action"]){const th=document.createElement("th");th.textContent=label;hr.appendChild(th);}
+head.appendChild(hr);table.appendChild(head);
+const body=document.createElement("tbody");
+for(const officer of data){
+const tr=document.createElement("tr");
+for(const value of [officer.full_name||"",officer.email||"",String(officer.role||"").replaceAll("_"," "),officer.is_active?"Active":"Inactive"]){const td=document.createElement("td");td.textContent=value;tr.appendChild(td);}
+const td=document.createElement("td");
+if(officer.role==="admin"){td.textContent="Administrator";}else{
+const btn=document.createElement("button");btn.type="button";btn.textContent=officer.is_active?"Deactivate":"Activate";btn.dataset.officerAction="toggle";btn.dataset.userId=officer.id;btn.dataset.active=String(!officer.is_active);btn.style.background=officer.is_active?"#a83232":"#087448";td.appendChild(btn);
+}
+tr.appendChild(td);body.appendChild(tr);
+}
+table.appendChild(body);wrap.appendChild(table);list.replaceChildren(wrap);
+}
+document.addEventListener("click",async e=>{
+const open=e.target.closest("button[data-officers='open']");
+if(open){
+document.querySelectorAll("#navigation button").forEach(b=>b.classList.remove("active"));open.classList.add("active");
+await showOfficerManagement();return;
+}
+const toggle=e.target.closest("button[data-officer-action='toggle']");
+if(!toggle)return;
+const makeActive=toggle.dataset.active==="true";
+if(!confirm((makeActive?"Activate":"Deactivate")+" this officer?"))return;
+toggle.disabled=true;
+const {data,error}=await db.functions.invoke("manage-officers",{body:{action:"set_active",user_id:toggle.dataset.userId,is_active:makeActive}});
+if(error||(data&&data.error)){toggle.disabled=false;showMessage($("sectionMessage"),error?error.message:data.error,true);return;}
+showMessage($("sectionMessage"),"Officer access "+(makeActive?"activated.":"deactivated."));
+await loadOfficerList();
+});
+
 function renderSubmissionTable(rows,review){
 const area=$("recordsArea");area.replaceChildren();
 if(!rows||rows.length===0){area.textContent=review?"There are no pending submissions.":"You have not submitted any records yet.";return;}
