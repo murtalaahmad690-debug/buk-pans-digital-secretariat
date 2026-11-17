@@ -122,6 +122,9 @@ footer{text-align:center;padding:24px;color:#78837b;font-size:12px}
 <button type="button" data-table="announcements">Announcements</button>
 <button type="button" data-table="resolutions">Resolutions</button>
 <button type="button" data-table="activity_logs">Activity Logs</button>
+<button type="button" data-workflow="new">New Submission</button>
+<button type="button" data-workflow="mine">My Submissions</button>
+<button type="button" data-workflow="approvals" id="approvalNav" class="hidden">Approval Centre</button>
 </nav>
 
 <div class="panel">
@@ -178,7 +181,11 @@ $(id).textContent=error?"—":count;
 }
 }
 
+let currentProfile=null;
+let currentSession=null;
+
 async function showDashboard(session){
+currentSession=session;
 const {data:profile,error}=await db.from("profiles")
 .select("full_name,role,is_active")
 .eq("id",session.user.id)
@@ -193,6 +200,8 @@ showMessage($("loginMessage"),
 return;
 }
 
+currentProfile=profile;
+$("approvalNav").classList.toggle("hidden",profile.role!=="admin");
 $("loginPage").classList.add("hidden");
 $("resetPage").classList.add("hidden");
 $("dashboardPage").classList.remove("hidden");
@@ -353,6 +362,107 @@ $("loginPage").classList.remove("hidden");
 $("password").value="";
 $("newPassword").value="";
 $("confirmPassword").value="";
+});
+
+const workflowFields={
+announcements:[["title","Title"],["content","Content","textarea"]],
+correspondence:[["reference_number","Reference number"],["subject","Subject"],["sender","Sender"],["recipient","Recipient"],["direction","Direction","select",["incoming","outgoing"]],["letter_date","Letter date","date"],["status","Status"],["details","Details","textarea"]],
+documents:[["title","Document title"],["description","Description","textarea"],["category","Category"],["storage_path","Storage path"],["confidentiality","Confidentiality","select",["public","internal","confidential"]]],
+meetings:[["title","Meeting title"],["description","Description","textarea"],["meeting_date","Meeting date","date"],["venue","Venue"],["status","Status"]],
+meeting_minutes:[["meeting_id","Meeting ID"],["agenda","Agenda","textarea"],["discussions","Discussions","textarea"],["decisions","Decisions","textarea"],["prepared_by","Prepared by"]],
+meeting_attendance:[["meeting_id","Meeting ID"],["member_name","Member name"],["matric_number","Matric number"],["attendance_status","Attendance status","select",["present","absent","excused"]]],
+resolutions:[["title","Resolution title"],["description","Description","textarea"],["responsible_person","Responsible person"],["deadline","Deadline","date"],["status","Status","select",["pending","in_progress","completed","deferred"]],["meeting_id","Meeting ID (optional)"]]
+};
+const workflowLabels={announcements:"Announcements",correspondence:"Correspondence",documents:"Documents",meetings:"Meetings",meeting_minutes:"Meeting Minutes",meeting_attendance:"Meeting Attendance",resolutions:"Resolutions"};
+
+function workflowHeader(title,description){
+$("sectionTitle").textContent=title;
+$("sectionDescription").textContent=description;
+$("recordsArea").replaceChildren();
+$("sectionMessage").textContent="";
+}
+function addWorkflowField(form,field){
+const [key,label,type,options]=field;
+const wrap=document.createElement("label");
+wrap.style.display="block";wrap.style.margin="10px 0";
+wrap.textContent=label;
+let input;
+if(type==="textarea"){input=document.createElement("textarea");input.rows=3;input.style.width="100%";}
+else if(type==="select"){input=document.createElement("select");input.style.width="100%";input.style.padding="12px";input.style.border="1px solid #ccd5ce";input.style.borderRadius="7px";for(const option of options){const o=document.createElement("option");o.value=option;o.textContent=option;input.appendChild(o);}}
+else{input=document.createElement("input");input.type=type==="date"?"date":"text";input.style.width="100%";}
+input.name=key;
+if(key==="meeting_id"&&workflowFields.meeting_attendance.some(x=>x[0]===key)){input.placeholder="Paste the meeting UUID";}
+if(key==="meeting_id"&&key==="meeting_id"&&workflowFields.resolutions.some(x=>x[0]===key))input.placeholder="Paste meeting UUID if applicable";
+wrap.appendChild(input);form.appendChild(wrap);
+}
+function showNewSubmission(){
+workflowHeader("New Record Submission","Submit a record for administrator review. It will not become official until approved.");
+const area=$("recordsArea");
+const form=document.createElement("form");
+const select=document.createElement("select");select.name="module";select.required=true;select.style.width="100%";select.style.padding="12px";
+for(const [key,label] of Object.entries(workflowLabels)){const o=document.createElement("option");o.value=key;o.textContent=label;select.appendChild(o);}
+const moduleLabel=document.createElement("label");moduleLabel.textContent="Record type";moduleLabel.style.display="block";moduleLabel.appendChild(select);form.appendChild(moduleLabel);
+const fields=document.createElement("div");form.appendChild(fields);
+const renderFields=()=>{fields.replaceChildren();for(const field of workflowFields[select.value])addWorkflowField(fields,field);};
+select.addEventListener("change",renderFields);renderFields();
+const submit=document.createElement("button");submit.type="submit";submit.textContent="Submit for Approval";submit.style.marginTop="12px";form.appendChild(submit);
+form.addEventListener("submit",async e=>{
+e.preventDefault();submit.disabled=true;submit.textContent="Submitting...";
+const payload={};for(const field of workflowFields[select.value]){const input=form.elements.namedItem(field[0]);payload[field[0]]=input.value.trim();}
+if(select.value==="resolutions"&&!payload.meeting_id)delete payload.meeting_id;
+if(select.value==="meeting_minutes")payload.prepared_by=payload.prepared_by||currentProfile.full_name||currentSession.user.email;
+const now=new Date().toISOString();
+const {error}=await db.from("record_submissions").insert({module:select.value,title:payload.title||workflowLabels[select.value],payload,status:"pending",created_by:currentSession.user.id,submitted_at:now});
+submit.disabled=false;submit.textContent="Submit for Approval";
+if(error){showMessage($("sectionMessage"),error.message,true);return;}
+showMessage($("sectionMessage"),"Submission sent successfully. It is now pending administrator approval.");
+form.reset();renderFields();
+});
+area.appendChild(form);
+}
+async function showMySubmissions(){
+workflowHeader("My Submissions","Your submitted records and their review status.");
+$("recordsArea").textContent="Loading your submissions...";
+const {data,error}=await db.from("record_submissions").select("id,module,title,status,created_at,submitted_at,review_notes").eq("created_by",currentSession.user.id).order("created_at",{ascending:false}).limit(100);
+if(error){$("recordsArea").textContent="Could not load submissions.";showMessage($("sectionMessage"),error.message,true);return;}
+renderSubmissionTable(data||false,false);
+}
+async function showApprovalCentre(){
+if(currentProfile.role!=="admin"){showMessage($("sectionMessage"),"Administrator access required.",true);return;}
+workflowHeader("Approval Centre","Review pending submissions. Approval transfers the record into its official module.");
+$("recordsArea").textContent="Loading pending submissions...";
+const {data,error}=await db.from("record_submissions").select("id,module,title,payload,created_by,created_at,submitted_at").eq("status","pending").order("submitted_at",{ascending:true}).limit(100);
+if(error){$("recordsArea").textContent="Could not load pending submissions.";showMessage($("sectionMessage"),error.message,true);return;}
+renderSubmissionTable(data||false,true);
+}
+function renderSubmissionTable(rows,review){
+const area=$("recordsArea");area.replaceChildren();
+if(!rows||rows.length===0){area.textContent=review?"There are no pending submissions.":"You have not submitted any records yet.";return;}
+const wrap=document.createElement("div");wrap.className="tablewrap";
+const table=document.createElement("table");const head=document.createElement("thead");const hr=document.createElement("tr");
+for(const label of (review?["Type","Title","Submitted","Details","Action"]:["Type","Title","Status","Created","Review notes"])){const th=document.createElement("th");th.textContent=label;hr.appendChild(th);}head.appendChild(hr);table.appendChild(head);
+const body=document.createElement("tbody");
+for(const row of rows){const tr=document.createElement("tr");
+const values=review?[workflowLabels[row.module]||row.module,row.title,row.submitted_at||row.created_at,JSON.stringify(row.payload)]:[workflowLabels[row.module]||row.module,row.title,row.status,row.created_at,row.review_notes||""];
+for(const value of values){const td=document.createElement("td");td.textContent=value==null?"":String(value);tr.appendChild(td);}
+if(review){const td=document.createElement("td");const approve=document.createElement("button");approve.type="button";approve.textContent="Approve";approve.style.margin="3px";approve.dataset.approve=row.id;const reject=document.createElement("button");reject.type="button";reject.textContent="Reject";reject.style.margin="3px";reject.style.background="#a83232";reject.dataset.reject=row.id;td.append(approve,reject);tr.appendChild(td);}
+body.appendChild(tr);}
+table.appendChild(body);wrap.appendChild(table);area.appendChild(wrap);
+}
+document.addEventListener("click",async e=>{
+const approve=e.target.closest("button[data-approve]");
+const reject=e.target.closest("button[data-reject]");
+if(!approve&&!reject)return;
+const id=approve?approve.dataset.approve:reject.dataset.reject;
+if(approve){approve.disabled=true;const {error}=await db.rpc("approve_record_submission",{p_submission_id:id,p_review_notes:null});if(error){approve.disabled=false;showMessage($("sectionMessage"),error.message,true);return;}showMessage($("sectionMessage"),"Submission approved and transferred to official records.");await showApprovalCentre();}
+else{const reason=prompt("Enter the reason for rejecting this submission:");if(reason===null)return;if(!reason.trim()){showMessage($("sectionMessage"),"A rejection reason is required.",true);return;}reject.disabled=true;const {error}=await db.rpc("reject_record_submission",{p_submission_id:id,p_review_notes:reason.trim()});if(error){reject.disabled=false;showMessage($("sectionMessage"),error.message,true);return;}showMessage($("sectionMessage"),"Submission rejected and reason recorded.");await showApprovalCentre();}
+});
+document.addEventListener("click",e=>{
+const btn=e.target.closest("button[data-workflow]");if(!btn)return;
+document.querySelectorAll("#navigation button").forEach(b=>b.classList.remove("active"));btn.classList.add("active");
+if(btn.dataset.workflow==="new")showNewSubmission();
+if(btn.dataset.workflow==="mine")showMySubmissions();
+if(btn.dataset.workflow==="approvals")showApprovalCentre();
 });
 
 document.addEventListener("click",async e=>{
